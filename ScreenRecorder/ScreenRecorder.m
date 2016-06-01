@@ -15,9 +15,9 @@ static ScreenRecorder *_screenRecorder;
 
 @implementation ScreenRecorder{
     
-    AVAssetWriter *videoWriter;//使用 AVAssetWriter 对象可以将样本缓存写入文件
-    AVAssetWriterInput *videoWriterInput;
-    AVAssetWriterInputPixelBufferAdaptor *avAdaptor;
+    AVAssetWriter                           *videoWriter;//使用 AVAssetWriter 对象可以将样本缓存写入文件
+    AVAssetWriterInput                      *videoWriterInput;
+    AVAssetWriterInputPixelBufferAdaptor    *avAdaptor;
     
     BOOL            _recording;     //正在录制中
     BOOL            _writing;       //正在将帧写入文件
@@ -35,7 +35,6 @@ static ScreenRecorder *_screenRecorder;
         _screenRecorder = [[self alloc] init];
         _screenRecorder.frameRate = 10;//默认帧率为10
     });
-    
     return _screenRecorder;
 }
 
@@ -43,7 +42,6 @@ static ScreenRecorder *_screenRecorder;
 {
     BOOL result = NO;
     if (!_recording) {
-        
         result = [self setUpWriter];
         if (result) {
             startedAt   = [NSDate date];
@@ -53,7 +51,6 @@ static ScreenRecorder *_screenRecorder;
 
             timer = [NSTimer scheduledTimerWithTimeInterval:1.0/self.frameRate target:self selector:@selector(drawFrame) userInfo:nil repeats:YES];
         }
-        
     }
     return result;
 }
@@ -75,7 +72,6 @@ static ScreenRecorder *_screenRecorder;
     if (![videoWriterInput isReadyForMoreMediaData]) {
         NSLog(@"Not ready for video data");
     } else {
-        
         @synchronized (self) {//创建一个互斥锁，保证此时没有其它线程对self对象进行修改
             CVPixelBufferRef pixelBuffer = NULL;
             CGImageRef cgImage = CGImageCreateCopy(newImage);
@@ -111,11 +107,9 @@ static ScreenRecorder *_screenRecorder;
 - (void)completeRecordingSession
 {
     [videoWriterInput markAsFinished];
-    
     // wait for the video
     int status = videoWriter.status;
-    while (status == AVAssetWriterStatusUnknown)
-    {
+    while (status == AVAssetWriterStatusUnknown) {
         NSLog(@"Waiting...");
         [NSThread sleepForTimeInterval:0.5f];
         status = videoWriter.status;
@@ -139,37 +133,25 @@ static ScreenRecorder *_screenRecorder;
 - (void)getFrame
 {
     if (!_writing) {
-        
         _writing = YES;
         
         size_t width = CGBitmapContextGetWidth(context);
         size_t height = CGBitmapContextGetHeight(context);
         
         CGContextClearRect(context, CGRectMake(0, 0, width, height));//将显示区域填充为透明背景
-        
-        //用下边注释掉的方法截屏不能够截取到动画效果
-//        [[[UIApplication sharedApplication].delegate window].layer renderInContext:context];
-//        [[UIApplication sharedApplication].delegate window].layer.contents = nil;
-//        CGImageRef cgImage = CGBitmapContextCreateImage(context);
-        
+
         [[[UIApplication sharedApplication].delegate window] drawViewHierarchyInRect:[[UIApplication sharedApplication].delegate window].bounds afterScreenUpdates:NO];
         UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
-        //UIGraphicsEndImageContext();
         CGImageRef cgImage = image.CGImage;
         
         if (_recording) {
             float millisElapsed = [[NSDate date] timeIntervalSinceDate:startedAt] * 1000.0-_spaceDate*1000.0;
             [self writeVideoFrameAtTime:CMTimeMake((int)millisElapsed, 1000) addImage:cgImage];
         }
-        
-        
        // CGImageRelease(cgImage);//在64位机器中添加该代码程序可以正常运行，在32位系统中添加该代码程序会崩溃
-        
         _writing = NO;
     }
 }
-
-
 
 - (BOOL)setUpWriter
 {
@@ -211,9 +193,9 @@ static ScreenRecorder *_screenRecorder;
     videoWriterInput.expectsMediaDataInRealTime = YES;
     NSMutableDictionary* bufferAttributes = [[NSMutableDictionary alloc] init];
     
-    [bufferAttributes setObject:[NSNumber numberWithUnsignedInt:kCVPixelFormatType_32BGRA] forKey:(NSString*)kCVPixelBufferPixelFormatTypeKey];//之前配置的下边注释掉的context使用的是kCVPixelFormatType_32ARGB，用起来颜色没有问题。但是用UIGraphicsBeginImageContextWithOptions([[UIApplication sharedApplication].delegate window].bounds.size, YES, 0);配置的context使用kCVPixelFormatType_32ARGB的话颜色会变成粉色，替换成kCVPixelFormatType_32BGRA之后，颜色正常。。。
+    [bufferAttributes setObject:[NSNumber numberWithUnsignedInt:kCVPixelFormatType_32BGRA] forKey:(NSString*)kCVPixelBufferPixelFormatTypeKey];
     
-    [bufferAttributes setObject:[NSNumber numberWithUnsignedInt:size.width] forKey:(NSString*)kCVPixelBufferWidthKey];//这个位置包括下面的两个，必须写成(int)size.width/16*16,因为这个的大小必须是16的倍数，否则图像会发生拉扯、挤压、旋转。。。。不知道为啥
+    [bufferAttributes setObject:[NSNumber numberWithUnsignedInt:size.width] forKey:(NSString*)kCVPixelBufferWidthKey];
     [bufferAttributes setObject:[NSNumber numberWithUnsignedInt:size.height ] forKey:(NSString*)kCVPixelBufferHeightKey];
     
     
@@ -225,30 +207,12 @@ static ScreenRecorder *_screenRecorder;
     [videoWriter startSessionAtSourceTime:CMTimeMake(0, 1000)];
     
     //create context
-    if (context== NULL)
-    {
-//        CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-//        context = CGBitmapContextCreate (
-//                                         NULL,//参数data指向绘图操作被渲染的内存区域，这个内存区域大小应该为（bytesPerRow*height）个字节。如果对绘制操作被渲染的内存区域并无特别的要求，那么可以传递NULL给参数data。
-//                                         (int)size.width/16*16,        //bitmap的宽度，单位为像素
-//                                         size.height ,       //bitmap的高度，单位为像素
-//                                         8,                 //内存中像素的每个组件的位数。例如，对于32位像素格式和RGB 颜色空间，你应该将这个值设为8.
-//                                         (int)size.width/16*16 * 4,    //bitmap的每一行在内存所占的比特数
-//                                         colorSpace,        //bitmap上下文使用的颜色空间
-//                                         kCGImageAlphaNoneSkipFirst
-//                                         );
-//        CGContextScaleCTM(context, scaleFactor, scaleFactor);
-//        CGColorSpaceRelease(colorSpace);
-//        CGContextSetAllowsAntialiasing(context,NO);//取消防锯齿
-//        CGAffineTransform flipVertical = CGAffineTransformMake(1, 0, 0, -1, 0, size.height/scaleFactor);
-//         CGContextConcatCTM(context, flipVertical);//应用这种变换
-        
+    if (context== NULL) {
         UIGraphicsBeginImageContextWithOptions([[UIApplication sharedApplication].delegate window].bounds.size, YES, 0);
         context = UIGraphicsGetCurrentContext();
 
     }
-    if (context== NULL)
-    {
+    if (context== NULL) {
         fprintf (stderr, "Context not created!");
         return NO;
     }
@@ -256,18 +220,12 @@ static ScreenRecorder *_screenRecorder;
     return YES;
 }
 
-
-
-- (void) cleanupWriter {
-    
-    avAdaptor = nil;
-    
-    videoWriterInput = nil;
-    
-    videoWriter = nil;
-    
-    startedAt = nil;
-
+- (void) cleanupWriter
+{
+    avAdaptor           = nil;
+    videoWriterInput    = nil;
+    videoWriter         = nil;
+    startedAt           = nil;
 }
 
 - (BOOL)is64bit
